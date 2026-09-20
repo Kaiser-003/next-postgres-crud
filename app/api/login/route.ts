@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
 import { pool } from "@/app/lib/db";
 
 export async function POST(request: Request) {
@@ -39,7 +40,25 @@ export async function POST(request: Request) {
       );
     }
 
-    return NextResponse.json({
+    const jwtSecret = process.env.JWT_SECRET;
+
+    if (!jwtSecret) {
+      throw new Error("JWT_SECRET is not configured");
+    }
+
+    const token = jwt.sign(
+      {
+        userId: user.id,
+        email: user.email,
+        name: user.name,
+      },
+      jwtSecret,
+      {
+        expiresIn: "1d",
+      }
+    );
+
+    const response = NextResponse.json({
       message: "Login successful",
       user: {
         id: user.id,
@@ -47,13 +66,25 @@ export async function POST(request: Request) {
         email: user.email,
       },
     });
+
+    response.cookies.set({
+      name: "token",
+      value: token,
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24,
+      path: "/",
+    });
+
+    return response;
   } catch (error) {
     console.error("Login error:", error);
 
     return NextResponse.json(
       { message: "Something went wrong" },
       { status: 500 }
+
     );
   }
 }
-

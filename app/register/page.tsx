@@ -163,7 +163,7 @@ export default function RegisterPage() {
             </label>
 
             <input
-              id="confirmPassword"
+              id="confirmPassword" 
               name="confirmPassword"
               type="password"
               value={confirmPassword}
