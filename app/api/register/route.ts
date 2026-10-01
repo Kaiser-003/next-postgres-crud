@@ -1,10 +1,18 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { pool } from "@/app/lib/db";
+import fs from "fs/promises";
+import path from "path";
+import { v4 as uuidv4 } from "uuid";
 
 export async function POST(request: Request) {
   try {
-    const { name, email, password } = await request.json();
+    const formData = await request.formData();
+
+    const name = formData.get("name")?.toString().trim();
+    const email = formData.get("email")?.toString().trim();
+    const password = formData.get("password")?.toString();
+    const profileImage = formData.get("profileImage");
 
     if (!name || !email || !password) {
       return NextResponse.json(
@@ -25,18 +33,66 @@ export async function POST(request: Request) {
       );
     }
 
+    let profileImagePath: string | null = null;
+
+    // Handle profile image
+    if (profileImage instanceof File) {
+      if (!profileImage.type.startsWith("image/")) {
+        return NextResponse.json(
+          { message: "Profile image must be an image" },
+          { status: 400 }
+        );
+      }
+
+      const imageBuffer = Buffer.from(
+        await profileImage.arrayBuffer()
+      );
+
+      const uploadDirectory = path.join(
+        process.cwd(),
+        "public",
+        "uploads",
+        "profile-images"
+      );
+
+      await fs.mkdir(uploadDirectory, {
+        recursive: true,
+      });
+
+      const fileName = `${uuidv4()}.jpg`;
+
+      const filePath = path.join(
+        uploadDirectory,
+        fileName
+      );
+
+      await fs.writeFile(filePath, imageBuffer);
+
+      profileImagePath = `/uploads/profile-images/${fileName}`;
+    }
+
     const passwordHash = await bcrypt.hash(password, 10);
 
     await pool.query(
       `
-      INSERT INTO users (name, email, password_hash)
-      VALUES ($1, $2, $3)
+      INSERT INTO users
+        (name, email, password_hash, profile_image)
+      VALUES
+        ($1, $2, $3, $4)
       `,
-      [name, email, passwordHash]
+      [
+        name,
+        email,
+        passwordHash,
+        profileImagePath,
+      ]
     );
 
     return NextResponse.json(
-      { message: "Registration successful" },
+      {
+        message: "Registration successful",
+        profileImage: profileImagePath,
+      },
       { status: 201 }
     );
   } catch (error) {
